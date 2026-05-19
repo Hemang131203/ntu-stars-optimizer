@@ -4,15 +4,17 @@
 
 https://ntu-stars-optimizer.netlify.app/
 
+
 ## Why I Built This
 
 NTU STARS registration moves fast. Your timetable planning should be faster.
 
 Instead of manually comparing endless index combinations and only realising later that a lecture, tutorial, or lab clashes, this tool checks the combinations for you. Upload your module schedule PDFs, set your preferences, and get clash-free timetable options automatically.
 
+
 ## Features
 
-- Upload/use multiple NTU class schedule PDFs
+- Upload multiple NTU class schedule PDFs
 - Extract course codes, index numbers, lesson types, days, times, venues, and remarks
 - Group lessons by course and index
 - Generate all possible one-index-per-course timetable combinations
@@ -29,13 +31,12 @@ Instead of manually comparing endless index combinations and only realising late
 - Lectures are treated as anchor sessions:
   - Lectures are checked for clashes
   - Lectures are ignored by preference scoring by default
+  
 
 ## Project Flow
 
 ```text
-User downloads one class schedule PDF per module
-↓
-PDFs are placed inside data/sample_pdfs
+User uploads one class schedule PDF per module
 ↓
 Parser extracts class timing rows
 ↓
@@ -48,21 +49,27 @@ Combinations with clashes are removed
 Remaining timetables are scored using preferences
 ↓
 Top recommended timetables are displayed
-Project Structure
+````
+
+## Project Structure
+
+```text
 ntu-stars-optimizer/
 │
 ├── data/
-│   ├── sample_pdfs/
-│   │   └── PDF files go here
 │   └── preferences.json
 │
+├── frontend/
+│   ├── app/
+│   ├── public/
+│   ├── package.json
+│   └── ...
+│
 ├── outputs/
-│   ├── parsed_rows.json
-│   ├── grouped_courses.json
-│   ├── valid_timetables.json
-│   └── ranked_timetables.json
+│   └── generated JSON outputs locally
 │
 ├── src/
+│   ├── api.py
 │   ├── main.py
 │   ├── pdf_parser.py
 │   ├── optimizer.py
@@ -71,37 +78,102 @@ ntu-stars-optimizer/
 │   └── models.py
 │
 ├── requirements.txt
-└── README.md
+├── README.md
+└── .gitignore
+```
 
+## Tech Stack
+
+```text
+Frontend: Next.js, React, TypeScript, Tailwind CSS
+Backend: Python, FastAPI
+PDF Parsing: pdfplumber
+Deployment: Netlify frontend + Render backend
+```
 
 ## Setup
 
-Create and activate a virtual environment:
+Clone the repository:
 
+```bash
+git clone https://github.com/Hemang131203/ntu-stars-optimizer.git
+cd ntu-stars-optimizer
+```
+
+Create and activate a Python virtual environment:
+
+```bash
 python -m venv venv
+```
 
 On Windows PowerShell:
 
+```bash
 .\venv\Scripts\Activate.ps1
+```
 
-Install dependencies:
+Install backend dependencies:
 
+```bash
 pip install -r requirements.txt
+```
+
+Create the frontend environment file:
+
+```bash
+cd frontend
+```
+
+Create a file named `.env.local` and add:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+Install frontend dependencies:
+
+```bash
+npm install
+```
+
+## Running Locally
+
+Start the backend from the project root:
+
+```bash
+uvicorn src.api:app --reload
+```
+
+The backend runs at:
+
+```text
+http://localhost:8000
+```
+
+Start the frontend from the `frontend` folder:
+
+```bash
+npm run dev
+```
+
+The frontend runs at:
+
+```text
+http://localhost:3000
+```
 
 ## Usage
 
-Place NTU class schedule PDFs inside:
+1. Download or print one NTU class schedule PDF per module.
+2. Open the web app.
+3. Upload all module PDFs.
+4. Select timetable preferences.
+5. Click Generate Timetable.
+6. View the top recommended clash-free timetables.
 
-data/sample_pdfs
+## Example Preferences
 
-Edit preferences in:
-
-data/preferences.json
-
-Run the program:
-
-python src/main.py
-Example Preferences
+```json
 {
   "avoid_before_time": "10:00",
   "avoid_after_time": "17:00",
@@ -122,7 +194,9 @@ Example Preferences
     }
   ]
 }
-Clash Logic
+```
+
+## Clash Logic
 
 Two classes clash only if their timings overlap on the same day.
 
@@ -130,21 +204,28 @@ Back-to-back classes are allowed.
 
 Example:
 
+```text
 13:30-15:30
 15:30-17:30
+```
 
 This is not a clash.
 
 The overlap condition is:
 
+```text
 class_a_start < class_b_end
 AND
 class_b_start < class_a_end
-Preference Logic
+```
+
+## Preference Logic
 
 The only mandatory rule is:
 
+```text
 No class timing clashes
+```
 
 All other preferences affect ranking only.
 
@@ -152,60 +233,26 @@ Lectures are included in clash checking but ignored by preference scoring by def
 
 This means if a user blocks Monday 12:30-14:00, a lecture in that window is acceptable, but a tutorial or lab in that window receives a penalty.
 
-Current Status
+## Privacy Note
 
-This is currently a Python prototype. A future version can be converted into a web application where users upload PDFs and select preferences through a UI.
+Uploaded PDFs are used only for timetable generation. The deployed backend processes the files temporarily and does not intentionally store uploaded PDFs.
 
+## Current Status
 
-## Step 2: Check `requirements.txt`
+This project is live and usable as a web application.
 
-Make sure `requirements.txt` contains only this for now:
+Live app:
 
 ```text
-pdfplumber
-pandas
+https://ntu-stars-optimizer.netlify.app/
+```
 
-pandas is not heavily used yet, but it is fine to keep because we may use it later for CSV/export.
+````
 
-Step 3: Add .gitignore
+After replacing, run:
 
-Create a new file in the main project folder:
-
-.gitignore
-
-Paste this:
-
-venv/
-__pycache__/
-*.pyc
-outputs/*.json
-.DS_Store
-.env
-
-This prevents unnecessary files from being committed later.
-
-Step 4: Check final structure
-
-Your project should now look like:
-
-NTU-STARS-OPTIMIZER
-├── data
-│   ├── preferences.json
-│   └── sample_pdfs
-├── outputs
-├── src
-│   ├── main.py
-│   ├── models.py
-│   ├── optimizer.py
-│   ├── pdf_parser.py
-│   ├── preferences.py
-│   └── utils.py
-├── .gitignore
-├── README.md
-└── requirements.txt
-
-After this, run one final test:
-
-python src/main.py
-
-If it still works, your Python prototype is in a good state.
+```bash
+git add README.md
+git commit -m "Clean up README"
+git push
+````
