@@ -11,6 +11,8 @@ NTU STARS registration moves fast. Your timetable planning should be faster.
 
 Instead of manually comparing endless index combinations and only realising later that a lecture, tutorial, or lab clashes, this tool checks the combinations for you. Upload your module schedule PDFs, set your preferences, and get clash-free timetable options automatically.
 
+![alt text](image.png)
+
 
 ## Features
 
@@ -31,7 +33,7 @@ Instead of manually comparing endless index combinations and only realising late
 - Lectures are treated as anchor sessions:
   - Lectures are checked for clashes
   - Lectures are ignored by preference scoring by default
-  
+
 
 ## Project Flow
 
