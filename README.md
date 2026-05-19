@@ -1,12 +1,14 @@
 # NTU STARS Timetable Optimizer
 
-A Python-based timetable optimizer for NTU students.
-
-This project helps students find clash-free course index combinations from NTU class schedule PDFs. It parses uploaded class schedule PDFs, extracts course indexes and lesson timings, checks for timetable clashes, and ranks valid timetables based on user-defined preferences.
-
-## Live Demo
+## Link
 
 https://ntu-stars-optimizer.netlify.app/
+
+## Why I Built This
+
+NTU STARS registration moves fast. Your timetable planning should be faster.
+
+Instead of manually comparing endless index combinations and only realising later that a lecture, tutorial, or lab clashes, this tool checks the combinations for you. Upload your module schedule PDFs, set your preferences, and get clash-free timetable options automatically.
 
 ## Features
 
@@ -70,7 +72,9 @@ ntu-stars-optimizer/
 │
 ├── requirements.txt
 └── README.md
-Setup
+
+
+## Setup
 
 Create and activate a virtual environment:
 
@@ -83,7 +87,8 @@ On Windows PowerShell:
 Install dependencies:
 
 pip install -r requirements.txt
-Usage
+
+## Usage
 
 Place NTU class schedule PDFs inside:
 
