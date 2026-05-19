@@ -1,0 +1,20 @@
+{
+  "avoid_before_time": "10:00",
+  "avoid_after_time": "17:00",
+  "avoid_days": ["FRI"],
+  "prefer_fewer_school_days": true,
+  "prefer_shorter_gaps": true,
+  "minimum_gap_minutes": 10,
+  "avoid_time_windows": [
+    {
+      "day": "MON",
+      "start": "12:30",
+      "end": "14:00"
+    },
+    {
+      "day": "TUE",
+      "start": "15:00",
+      "end": "16:00"
+    }
+  ]
+}
