@@ -1,6 +1,5 @@
 from pathlib import Path
 import json
-import shutil
 import tempfile
 import sys
 
@@ -14,15 +13,17 @@ sys.path.append(str(CURRENT_DIR))
 from pdf_parser import parse_pdf_to_rows
 from optimizer import (
     group_rows_by_course_and_index,
-    generate_clash_free_timetables,
-    rank_timetables,
+    find_top_timetables_fast,
 )
+from preferences import prepare_preferences_for_scoring
 
 
 MAX_PDFS = 8
 MAX_FILE_SIZE_MB = 10
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 MAX_COMBINATIONS = 2_000_000
+SEARCH_TIME_LIMIT_SECONDS = 25
+MAX_VALID_TIMETABLES_TO_SCORE = 300_000
 
 
 app = FastAPI(title="NTU STARS Timetable Optimizer API")
@@ -210,28 +211,73 @@ async def optimize_timetable(
             ),
         )
 
-    valid_timetables = generate_clash_free_timetables(grouped_courses)
+    prepared_preferences = prepare_preferences_for_scoring(preferences)
+    search_result = find_top_timetables_fast(
+        grouped_courses=grouped_courses,
+        preferences=prepared_preferences,
+        top_k=5,
+        time_limit_seconds=SEARCH_TIME_LIMIT_SECONDS,
+        max_valid_timetables=MAX_VALID_TIMETABLES_TO_SCORE,
+    )
 
-    if not valid_timetables:
+    valid_timetables_found = search_result["valid_timetables_found"]
+    top_timetables = search_result["top_timetables"]
+    search_truncated = search_result["search_truncated"]
+    truncation_reason = search_result["truncation_reason"]
+    elapsed_seconds = search_result["elapsed_seconds"]
+
+    if not top_timetables:
+        if search_truncated:
+            if truncation_reason == "time_limit":
+                message = (
+                    "Search stopped because it exceeded the server time limit. "
+                    "Try fewer modules or stricter preferences."
+                )
+            else:
+                message = (
+                    "Search stopped because the number of valid timetables is very large. "
+                    "Try fewer modules or stricter preferences."
+                )
+        else:
+            message = (
+                "No clash-free timetable was found for the uploaded modules. "
+                "This may mean every possible index combination has at least one clash."
+            )
+
         return {
             "detected_courses": build_detected_courses_summary(grouped_courses),
             "total_rows_extracted": len(all_rows),
             "estimated_combinations": estimated_combinations,
-            "valid_timetables_found": 0,
+            "valid_timetables_found": valid_timetables_found,
             "top_timetables": [],
-            "message": (
-                "No clash-free timetable was found for the uploaded modules. "
-                "This may mean every possible index combination has at least one clash."
-            ),
+            "search_truncated": search_truncated,
+            "truncation_reason": truncation_reason,
+            "optimization_elapsed_seconds": elapsed_seconds,
+            "message": message,
         }
 
-    ranked_timetables = rank_timetables(valid_timetables, preferences)
+    if search_truncated:
+        if truncation_reason == "time_limit":
+            message = (
+                "Timetables generated from a partial search due to server time limit. "
+                "Best options found so far are shown."
+            )
+        else:
+            message = (
+                "Timetables generated from a partial search due to very large result space. "
+                "Best options found so far are shown."
+            )
+    else:
+        message = "Timetables generated successfully."
 
     return {
         "detected_courses": build_detected_courses_summary(grouped_courses),
         "total_rows_extracted": len(all_rows),
         "estimated_combinations": estimated_combinations,
-        "valid_timetables_found": len(valid_timetables),
-        "top_timetables": ranked_timetables[:5],
-        "message": "Timetables generated successfully.",
+        "valid_timetables_found": valid_timetables_found,
+        "top_timetables": top_timetables,
+        "search_truncated": search_truncated,
+        "truncation_reason": truncation_reason,
+        "optimization_elapsed_seconds": elapsed_seconds,
+        "message": message,
     }

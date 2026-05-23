@@ -30,8 +30,13 @@ type ApiResponse = {
     indexes_found: number;
   }[];
   total_rows_extracted: number;
+  estimated_combinations: number;
   valid_timetables_found: number;
   top_timetables: Timetable[];
+  message: string;
+  search_truncated?: boolean;
+  truncation_reason?: string | null;
+  optimization_elapsed_seconds?: number;
 };
 
 type AvoidTimeWindow = {
@@ -74,6 +79,37 @@ function groupClassesByDay(classes: ClassSession[]) {
 function formatPreferenceTime(time: string) {
   if (!time) return "not set";
   return time;
+}
+
+async function extractErrorMessage(response: Response): Promise<string> {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const payload = await response.json();
+
+      if (typeof payload.detail === "string") {
+        return payload.detail;
+      }
+
+      if (typeof payload.message === "string") {
+        return payload.message;
+      }
+    } catch {
+      // Ignore parse errors and fall through.
+    }
+  }
+
+  try {
+    const text = await response.text();
+    if (text.trim()) {
+      return text;
+    }
+  } catch {
+    // Ignore read errors and use fallback.
+  }
+
+  return "Failed to generate timetable.";
 }
 
 export default function Home() {
@@ -178,24 +214,31 @@ export default function Home() {
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-if (!apiUrl) {
-  throw new Error("API URL is not configured.");
-}
+      if (!apiUrl) {
+        throw new Error("API URL is not configured.");
+      }
 
-const response = await fetch(`${apiUrl}/optimize`, {
+      const response = await fetch(`${apiUrl}/optimize`, {
         method: "POST",
         body: formData,
       });
 
       if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Failed to generate timetable.");
+        throw new Error(await extractErrorMessage(response));
       }
 
       const data: ApiResponse = await response.json();
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+        setError(
+          `Cannot reach backend API (${apiUrl || "URL not configured"}). ` +
+            "The Render service may be sleeping, unavailable, or the request timed out."
+        );
+      } else {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
+      }
     } finally {
       setLoading(false);
     }
@@ -217,13 +260,16 @@ const response = await fetch(`${apiUrl}/optimize`, {
             available indexes, removes clashing combinations, and ranks the best
             timetables based on your preferences.
           </p>
+          <p className="mt-2 text-sm text-slate-500">
+            Note: Generated timetables are suggestions based on extracted data. This tool does not have real-time access to STARS and cannot register timetables in the STARS system. It is only a planning helper to visualize possible timetable combinations and their preference matches. Always verify against the official STARS system before making decisions.
+          </p>
         </header>
 
         <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">
             <h2 className="text-xl font-semibold">1. Upload PDFs</h2>
             <p className="mt-2 text-sm text-slate-400">
-              Select one class schedule PDF per module.
+              Select one class schedule PDF per module. Upload all files at once.
             </p>
 
             <input
@@ -511,16 +557,28 @@ const response = await fetch(`${apiUrl}/optimize`, {
 
         {result && (
           <section className="mt-10 space-y-6">
+            <div
+              className={`rounded-2xl border p-4 ${
+                result.search_truncated
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
+                  : "border-cyan-400/30 bg-cyan-400/10 text-cyan-100"
+              }`}
+            >
+              {result.message}
+            </div>
+
             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
               <h2 className="text-2xl font-bold">Results Summary</h2>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div className="mt-4 grid gap-4 md:grid-cols-5">
                 <div className="rounded-xl bg-slate-950 p-4">
                   <p className="text-sm text-slate-400">Rows extracted</p>
                   <p className="mt-1 text-2xl font-bold">
                     {result.total_rows_extracted}
                   </p>
                 </div>
+
+                
 
                 <div className="rounded-xl bg-slate-950 p-4">
                   <p className="text-sm text-slate-400">
@@ -537,6 +595,8 @@ const response = await fetch(`${apiUrl}/optimize`, {
                     {result.detected_courses.length}
                   </p>
                 </div>
+
+                
               </div>
 
               <div className="mt-5">
@@ -575,9 +635,6 @@ const response = await fetch(`${apiUrl}/optimize`, {
                   <div>
                     <h3 className="text-xl font-bold">
                       Rank {index + 1}{" "}
-                      <span className="text-slate-400">
-                        | Match score {timetable.score}
-                      </span>
                     </h3>
 
                     <div className="mt-3 flex flex-wrap gap-2">

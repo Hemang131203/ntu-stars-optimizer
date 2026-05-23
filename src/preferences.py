@@ -52,6 +52,85 @@ def load_preferences(preferences_path: str = "data/preferences.json") -> dict:
     return preferences
 
 
+def prepare_preferences_for_scoring(preferences: dict) -> dict:
+    """
+    Adds cached/normalized fields so repeated timetable scoring is faster.
+    """
+    prepared = dict(preferences)
+
+    avoid_before_time = prepared.get("avoid_before_time")
+    avoid_after_time = prepared.get("avoid_after_time")
+    avoid_days = prepared.get("avoid_days", [])
+
+    try:
+        prepared["_avoid_before_minutes"] = (
+            time_to_minutes(avoid_before_time) if avoid_before_time else None
+        )
+    except (TypeError, ValueError):
+        prepared["_avoid_before_minutes"] = None
+
+    try:
+        prepared["_avoid_after_minutes"] = (
+            time_to_minutes(avoid_after_time) if avoid_after_time else None
+        )
+    except (TypeError, ValueError):
+        prepared["_avoid_after_minutes"] = None
+    prepared["_avoid_days_set"] = set(avoid_days)
+
+    prepared_windows = []
+    for window in prepared.get("avoid_time_windows", []):
+        day = window.get("day")
+        start = window.get("start")
+        end = window.get("end")
+
+        if not day or not start or not end:
+            continue
+
+        try:
+            start_minutes = time_to_minutes(start)
+            end_minutes = time_to_minutes(end)
+        except (TypeError, ValueError):
+            continue
+
+        prepared_windows.append(
+            {
+                "day": day,
+                "start": start,
+                "end": end,
+                "start_minutes": start_minutes,
+                "end_minutes": end_minutes,
+            }
+        )
+
+    prepared["_avoid_time_windows_prepared"] = prepared_windows
+    prepared["_is_prepared_for_scoring"] = True
+
+    return prepared
+
+
+def ensure_prepared_preferences(preferences: dict) -> dict:
+    if preferences.get("_is_prepared_for_scoring"):
+        return preferences
+
+    return prepare_preferences_for_scoring(preferences)
+
+
+def class_start_minutes(class_session: dict) -> int:
+    cached = class_session.get("_start_minutes")
+    if cached is not None:
+        return cached
+
+    return time_to_minutes(class_session["start"])
+
+
+def class_end_minutes(class_session: dict) -> int:
+    cached = class_session.get("_end_minutes")
+    if cached is not None:
+        return cached
+
+    return time_to_minutes(class_session["end"])
+
+
 def score_timetable(classes: list[dict], preferences: dict) -> tuple[int, list[str], dict]:
     """
     Scores a timetable based on user preferences.
@@ -61,7 +140,8 @@ def score_timetable(classes: list[dict], preferences: dict) -> tuple[int, list[s
     Returns:
     score, explanations, breakdown
     """
-    explanations = []
+    prepared_preferences = ensure_prepared_preferences(preferences)
+    explanations: list[str] = []
 
     breakdown = {
         "early_late_day_penalty": 0,
@@ -71,19 +151,19 @@ def score_timetable(classes: list[dict], preferences: dict) -> tuple[int, list[s
     }
 
     breakdown["early_late_day_penalty"] = score_flexible_class_time_preferences(
-        classes, preferences, explanations
+        classes, prepared_preferences, explanations
     )
 
     breakdown["avoid_time_window_penalty"] = score_avoid_time_windows(
-        classes, preferences, explanations
+        classes, prepared_preferences, explanations
     )
 
     breakdown["school_days_penalty"] = score_school_days(
-        classes, preferences, explanations
+        classes, prepared_preferences, explanations
     )
 
     breakdown["gap_penalty"] = score_gaps(
-        classes, preferences, explanations
+        classes, prepared_preferences, explanations
     )
 
     total_score = sum(breakdown.values())
@@ -91,31 +171,58 @@ def score_timetable(classes: list[dict], preferences: dict) -> tuple[int, list[s
     return total_score, explanations, breakdown
 
 
+def score_timetable_fast(classes: list[dict], preferences: dict) -> int:
+    """
+    Fast path used during large search:
+    returns total score only (no explanations/breakdown).
+    """
+    prepared_preferences = ensure_prepared_preferences(preferences)
+
+    total_score = 0
+    total_score += score_flexible_class_time_preferences(
+        classes,
+        prepared_preferences,
+        explanations=None,
+    )
+    total_score += score_avoid_time_windows(
+        classes,
+        prepared_preferences,
+        explanations=None,
+    )
+    total_score += score_school_days(
+        classes,
+        prepared_preferences,
+        explanations=None,
+    )
+    total_score += score_gaps(
+        classes,
+        prepared_preferences,
+        explanations=None,
+    )
+
+    return total_score
+
+
 def score_flexible_class_time_preferences(
     classes: list[dict],
     preferences: dict,
-    explanations: list[str],
+    explanations: list[str] | None,
 ) -> int:
     """
     Scores preferences that apply only to tutorials/labs/etc.
     """
     score = 0
 
-    avoid_before_time = preferences.get("avoid_before_time")
-    avoid_after_time = preferences.get("avoid_after_time")
-    avoid_days = preferences.get("avoid_days", [])
-
-    avoid_before_minutes = (
-        time_to_minutes(avoid_before_time) if avoid_before_time else None
-    )
-    avoid_after_minutes = time_to_minutes(avoid_after_time) if avoid_after_time else None
+    avoid_before_minutes = preferences.get("_avoid_before_minutes")
+    avoid_after_minutes = preferences.get("_avoid_after_minutes")
+    avoid_days = preferences.get("_avoid_days_set", set())
 
     for c in classes:
         if not is_flexible_class(c):
             continue
 
-        start = time_to_minutes(c["start"])
-        end = time_to_minutes(c["end"])
+        start = class_start_minutes(c)
+        end = class_end_minutes(c)
 
         class_label = (
             f'{c["course"]} {c["index"]} {c["type"]} {c["group"]} '
@@ -124,15 +231,18 @@ def score_flexible_class_time_preferences(
 
         if avoid_before_minutes is not None and start < avoid_before_minutes:
             score += 40
-            explanations.append(f"Avoid early class: {class_label}")
+            if explanations is not None:
+                explanations.append(f"Avoid early class: {class_label}")
 
         if avoid_after_minutes is not None and end > avoid_after_minutes:
             score += 40
-            explanations.append(f"Avoid late class: {class_label}")
+            if explanations is not None:
+                explanations.append(f"Avoid late class: {class_label}")
 
         if c["day"] in avoid_days:
             score += 50
-            explanations.append(f"Avoid selected day: {class_label}")
+            if explanations is not None:
+                explanations.append(f"Avoid selected day: {class_label}")
 
     return score
 
@@ -140,7 +250,7 @@ def score_flexible_class_time_preferences(
 def score_school_days(
     classes: list[dict],
     preferences: dict,
-    explanations: list[str],
+    explanations: list[str] | None,
 ) -> int:
     """
     Adds penalty for each school day used.
@@ -154,7 +264,8 @@ def score_school_days(
     # Small penalty per school day
     penalty = len(days) * 10
 
-    explanations.append(f"School days used: {len(days)}")
+    if explanations is not None:
+        explanations.append(f"School days used: {len(days)}")
 
     return penalty
 
@@ -162,7 +273,7 @@ def score_school_days(
 def score_gaps(
     classes: list[dict],
     preferences: dict,
-    explanations: list[str],
+    explanations: list[str] | None,
 ) -> int:
     """
     Scores gaps between classes on the same day.
@@ -181,14 +292,14 @@ def score_gaps(
         classes_by_day.setdefault(c["day"], []).append(c)
 
     for day, day_classes in classes_by_day.items():
-        sorted_classes = sorted(day_classes, key=lambda c: time_to_minutes(c["start"]))
+        sorted_classes = sorted(day_classes, key=class_start_minutes)
 
         for i in range(len(sorted_classes) - 1):
             current_class = sorted_classes[i]
             next_class = sorted_classes[i + 1]
 
-            current_end = time_to_minutes(current_class["end"])
-            next_start = time_to_minutes(next_class["start"])
+            current_end = class_end_minutes(current_class)
+            next_start = class_start_minutes(next_class)
 
             gap = next_start - current_end
 
@@ -198,12 +309,13 @@ def score_gaps(
 
             if minimum_gap_minutes and gap < minimum_gap_minutes:
                 score += 25
-                explanations.append(
-                    f"{day} gap below preferred minimum: "
-                    f"{gap} min between "
-                    f'{current_class["course"]} {current_class["type"]} and '
-                    f'{next_class["course"]} {next_class["type"]}'
-                )
+                if explanations is not None:
+                    explanations.append(
+                        f"{day} gap below preferred minimum: "
+                        f"{gap} min between "
+                        f'{current_class["course"]} {current_class["type"]} and '
+                        f'{next_class["course"]} {next_class["type"]}'
+                    )
 
             if prefer_shorter_gaps:
                 # Every 30 minutes of gap adds 1 point.
@@ -216,7 +328,7 @@ def score_gaps(
 def score_avoid_time_windows(
     classes: list[dict],
     preferences: dict,
-    explanations: list[str],
+    explanations: list[str] | None,
 ) -> int:
     """
     Penalizes tutorials/labs/etc. that overlap with user-defined avoid time windows.
@@ -228,12 +340,12 @@ def score_avoid_time_windows(
     Lectures are ignored by default.
     """
     score = 0
-    avoid_time_windows = preferences.get("avoid_time_windows", [])
+    avoid_time_windows = preferences.get("_avoid_time_windows_prepared", [])
 
     for window in avoid_time_windows:
         window_day = window["day"]
-        window_start = time_to_minutes(window["start"])
-        window_end = time_to_minutes(window["end"])
+        window_start = window["start_minutes"]
+        window_end = window["end_minutes"]
 
         for c in classes:
             if not is_flexible_class(c):
@@ -242,19 +354,20 @@ def score_avoid_time_windows(
             if c["day"] != window_day:
                 continue
 
-            class_start = time_to_minutes(c["start"])
-            class_end = time_to_minutes(c["end"])
+            class_start = class_start_minutes(c)
+            class_end = class_end_minutes(c)
 
             overlaps = class_start < window_end and window_start < class_end
 
             if overlaps:
                 score += 60
 
-                explanations.append(
-                    f"Avoid time window: {c['course']} {c['index']} "
-                    f"{c['type']} {c['group']} {c['day']} "
-                    f"{c['start']}-{c['end']} overlaps "
-                    f"{window_day} {window['start']}-{window['end']}"
-                )
+                if explanations is not None:
+                    explanations.append(
+                        f"Avoid time window: {c['course']} {c['index']} "
+                        f"{c['type']} {c['group']} {c['day']} "
+                        f"{c['start']}-{c['end']} overlaps "
+                        f"{window_day} {window['start']}-{window['end']}"
+                    )
 
     return score
