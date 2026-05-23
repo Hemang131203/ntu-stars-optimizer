@@ -5,6 +5,9 @@
 https://ntu-stars-optimizer.netlify.app/
 
 
+# Class Schedule Download Link (pdf format)
+https://wish.wis.ntu.edu.sg/webexe/owa/aus_schedule.main
+
 ## Why I Built This
 
 NTU STARS registration moves fast. Your timetable planning should be faster.
@@ -15,6 +18,7 @@ Instead of manually comparing endless index combinations and only realising late
 
 ## Demo video
 [Watch 30s demo](./assets/NTU-Star-time-table-optimizer-video.mp4)
+
 
 ## Features
 
