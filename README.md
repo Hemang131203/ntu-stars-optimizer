@@ -11,8 +11,10 @@ NTU STARS registration moves fast. Your timetable planning should be faster.
 
 Instead of manually comparing endless index combinations and only realising later that a lecture, tutorial, or lab clashes, this tool checks the combinations for you. Upload your module schedule PDFs, set your preferences, and get clash-free timetable options automatically.
 
-![alt text](image.png)
+![alt text](image-1.png)
 
+## Demo video
+[Watch 30s demo](./assets/NTU-Star-time-table-optimizer-video.mp4)
 
 ## Features
 
