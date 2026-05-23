@@ -1,11 +1,11 @@
 # NTU STARS Timetable Optimizer
 
-## Link
+## Web Link
 
 https://ntu-stars-optimizer.netlify.app/
 
 
-# Class Schedule Download Link (pdf format)
+## Class Schedule Download Link (pdf format)
 https://wish.wis.ntu.edu.sg/webexe/owa/aus_schedule.main
 
 ## Why I Built This
