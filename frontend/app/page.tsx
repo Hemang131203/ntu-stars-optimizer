@@ -271,6 +271,18 @@ export default function Home() {
             <p className="mt-2 text-sm text-slate-400">
               Select one class schedule PDF per module. Upload all files at once.
             </p>
+            <p className="mt-1 text-sm text-slate-500">
+              Need a class schedule PDF?{" "}
+              <a
+                href="https://wish.wis.ntu.edu.sg/webexe/owa/aus_schedule.main"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyan-300 underline hover:text-cyan-200"
+              >
+                Download from the official NTU WIS page
+              </a>
+              .
+            </p>
 
             <input
               ref={fileInputRef}
